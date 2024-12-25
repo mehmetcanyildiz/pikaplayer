@@ -1,46 +1,27 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { Movie } from '@/types/profile';
 import VideoPlayer from '@/components/player/VideoPlayer';
 import InfiniteScroll from '@/components/common/InfiniteScroll';
-import { useMovies } from '@/hooks/useStreamingData';
+import { useMovies, useMovieCategories } from '@/hooks/useStreamingData';
 
 const PAGE_SIZE = 24;
 
 export default function MoviesPage() {
   const router = useRouter();
   const { currentProfile } = useProfiles();
-  const { data: allMovies, error: fetchError, isLoading } = useMovies(currentProfile);
+  const { data: categories = [], isLoading: categoriesLoading } = useMovieCategories(currentProfile);
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const { data: allMovies = [], error: fetchError, isLoading: moviesLoading } = useMovies(currentProfile, selectedCategory);
   
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
   const [page, setPage] = useState(1);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  const categories = useMemo(() => {
-    if (!allMovies) return ['all'];
-    const categorySet = new Set<string>();
-    allMovies.forEach(movie => {
-      if (movie.category) {
-        categorySet.add(movie.category);
-      }
-    });
-    return ['all', ...Array.from(categorySet)];
-  }, [allMovies]);
-
-  const filteredMovies = useMemo(() => {
-    if (!allMovies) return [];
-    if (selectedCategory === 'all') return allMovies;
-    return allMovies.filter(movie => movie.category === selectedCategory);
-  }, [allMovies, selectedCategory]);
-
-  const paginatedMovies = useMemo(() => {
-    return filteredMovies.slice(0, page * PAGE_SIZE);
-  }, [filteredMovies, page]);
-
-  const hasMore = paginatedMovies.length < filteredMovies.length;
+  const paginatedMovies = allMovies.slice(0, page * PAGE_SIZE);
+  const hasMore = paginatedMovies.length < allMovies.length;
 
   useEffect(() => {
     if (!currentProfile) {
@@ -82,9 +63,6 @@ export default function MoviesPage() {
       )}
       <div className="p-2">
         <h3 className="text-sm font-medium truncate">{movie.name}</h3>
-        {movie.category && (
-          <p className="text-xs text-gray-400 mt-1">{movie.category}</p>
-        )}
       </div>
     </div>
   );
@@ -118,8 +96,10 @@ export default function MoviesPage() {
       {selectedMovie ? (
         <div className="mb-8">
           <VideoPlayer
-            src={`${currentProfile?.url}/movie/${currentProfile?.username}/${currentProfile?.password}/${selectedMovie.streamId}.m3u8`}
+            src={`${currentProfile?.url}/movie/${currentProfile?.username}/${currentProfile?.password}/${selectedMovie.streamId}.ts`}
             poster={selectedMovie.thumbnail}
+            title={selectedMovie.name}
+            onBack={() => setSelectedMovie(null)}
             onError={(error) => {
               console.error('Video player error:', error);
             }}
@@ -129,9 +109,6 @@ export default function MoviesPage() {
               <h2 className="text-2xl font-bold">{selectedMovie.name}</h2>
               {selectedMovie.plot && (
                 <p className="mt-2 text-gray-400">{selectedMovie.plot}</p>
-              )}
-              {selectedMovie.category && (
-                <p className="mt-2 text-sm text-primary">{selectedMovie.category}</p>
               )}
             </div>
             <button
@@ -144,18 +121,28 @@ export default function MoviesPage() {
         </div>
       ) : (
         <>
-          <div className="mb-6 flex flex-wrap gap-2">
+          <div className="mb-6 flex gap-2 overflow-x-auto whitespace-nowrap pb-2 hide-scrollbar">
+            <button
+              onClick={() => setSelectedCategory('')}
+              className={`px-4 py-2 rounded-full text-sm ${
+                selectedCategory === ''
+                  ? 'bg-primary text-white'
+                  : 'bg-secondary hover:bg-gray-700'
+              }`}
+            >
+              All Movies
+            </button>
             {categories.map((category) => (
               <button
-                key={category}
-                onClick={() => setSelectedCategory(category)}
+                key={category.category_id}
+                onClick={() => setSelectedCategory(category.category_id)}
                 className={`px-4 py-2 rounded-full text-sm ${
-                  selectedCategory === category
+                  selectedCategory === category.category_id
                     ? 'bg-primary text-white'
                     : 'bg-secondary hover:bg-gray-700'
                 }`}
               >
-                {category === 'all' ? 'All Movies' : category}
+                {category.category_name}
               </button>
             ))}
           </div>
@@ -165,7 +152,7 @@ export default function MoviesPage() {
             renderItem={renderMovie}
             loadMore={loadMore}
             hasMore={hasMore}
-            loading={isLoading}
+            loading={moviesLoading || categoriesLoading}
             className="mt-4"
           />
         </>

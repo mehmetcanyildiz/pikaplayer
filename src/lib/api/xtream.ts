@@ -27,14 +27,137 @@ export interface XtreamAuthResponse {
 }
 
 export class XtreamAPIError extends Error {
-  constructor(
-    message: string,
-    public statusCode?: number,
-    public response?: any
-  ) {
+  statusCode?: number;
+
+  constructor(message: string, statusCode?: number) {
     super(message);
     this.name = 'XtreamAPIError';
+    this.statusCode = statusCode;
   }
+}
+
+interface BaseCategory {
+  category_id: string;
+  category_name: string;
+  parent_id: number;
+}
+
+export interface LiveCategory extends BaseCategory {}
+export interface VodCategory extends BaseCategory {}
+export interface SeriesCategory extends BaseCategory {}
+
+interface BaseStream {
+  stream_id: number;
+  name: string;
+  stream_icon?: string;
+  category_id: string;
+}
+
+export interface LiveStream extends BaseStream {
+  epg_channel_id?: string;
+  is_adult?: boolean;
+}
+
+export interface VodStream extends BaseStream {
+  stream_type: string;
+  container_extension: string;
+  plot?: string;
+  cast?: string;
+  director?: string;
+  genre?: string;
+  release_date?: string;
+  youtube_trailer?: string;
+  rating?: string;
+  rating_5based?: number;
+}
+
+export interface SeriesStream extends BaseStream {
+  series_id: number;
+  cover?: string;
+  plot?: string;
+  cast?: string;
+  director?: string;
+  genre?: string;
+  release_date?: string;
+  rating?: string;
+  rating_5based?: number;
+}
+
+export interface SeriesInfo {
+  seasons: {
+    [key: string]: {
+      air_date: string;
+      episode_count: number;
+      id: number;
+      name: string;
+      overview: string;
+      season_number: number;
+      episodes: {
+        id: number;
+        episode_num: number;
+        title: string;
+        container_extension: string;
+        info: {
+          duration_secs?: number;
+          duration?: string;
+          plot?: string;
+          releasedate?: string;
+        };
+      }[];
+    };
+  };
+  info: {
+    name: string;
+    cover?: string;
+    plot?: string;
+    cast?: string;
+    director?: string;
+    genre?: string;
+    release_date?: string;
+    rating?: string;
+    rating_5based?: number;
+  };
+}
+
+export interface Movie {
+  id: string;
+  streamId: number;
+  name: string;
+  thumbnail: string | null;
+  streamType: 'movie';
+  plot: string;
+  cast: string;
+  director: string;
+  genre: string;
+  releaseDate: string;
+  duration: string;
+  rating: string;
+}
+
+export interface Episode {
+  id: string;
+  title: string;
+  seasonNumber: number;
+  episodeNumber: number;
+  plot: string;
+  duration: string;
+  releaseDate: string;
+}
+
+export interface Series {
+  id: string;
+  seriesId: number;
+  name: string;
+  thumbnail: string | null;
+  streamType: 'series';
+  plot: string;
+  cast: string;
+  director: string;
+  genre: string;
+  releaseDate: string;
+  rating: string;
+  rating_5based: number;
+  seasons: number[];
 }
 
 export default class XtreamAPI {
@@ -57,105 +180,66 @@ export default class XtreamAPI {
     this.password = profile.password;
   }
 
-  private async fetchWithRetry(url: string, retries = 3): Promise<any> {
-    let lastError: Error | null = null;
+  private getPlayerApiUrl() {
+    return `${this.baseUrl}/player_api.php`;
+  }
+
+  private async fetchApi<T>(params: Record<string, string>): Promise<T> {
+    const url = new URL(this.getPlayerApiUrl());
+    url.searchParams.append('username', this.username);
+    url.searchParams.append('password', this.password);
     
-    for (let i = 0; i < retries; i++) {
-      try {
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-          throw new XtreamAPIError(
-            `HTTP error ${response.status}: ${response.statusText}`,
-            response.status,
-            await response.json().catch(() => null)
-          );
-        }
-        
-        return await response.json();
-      } catch (error) {
-        console.error(`Attempt ${i + 1} failed:`, error);
-        lastError = error instanceof Error ? error : new Error(String(error));
-        
-        if (i < retries - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)));
-        }
-      }
+    for (const [key, value] of Object.entries(params)) {
+      url.searchParams.append(key, value);
     }
-    
-    throw lastError || new Error('Failed to fetch after multiple retries');
+
+    try {
+      const response = await fetch(url.toString());
+      
+      if (!response.ok) {
+        throw new XtreamAPIError(`HTTP error: ${response.status}`, response.status);
+      }
+
+      const data = await response.json();
+      return data as T;
+    } catch (error) {
+      if (error instanceof XtreamAPIError) {
+        throw error;
+      }
+      throw new XtreamAPIError('Failed to connect to streaming service');
+    }
   }
 
-  private mapLiveStream(stream: any): LiveStream {
-    return {
-      id: stream.stream_id.toString(),
-      streamId: stream.stream_id,
-      name: stream.name,
-      thumbnail: stream.stream_icon || null,
-      streamType: 'live',
-      epgChannelId: stream.epg_channel_id,
-      isAdult: stream.is_adult === '1',
-      categoryId: stream.category_id?.toString()
-    };
+  async getLiveCategories() {
+    return this.fetchApi<LiveCategory[]>({ action: 'get_live_categories' });
   }
 
-  private mapMovie(movie: any): Movie {
-    return {
-      id: movie.stream_id.toString(),
-      streamId: movie.stream_id,
-      name: movie.name,
-      thumbnail: movie.stream_icon || movie.cover || null,
-      streamType: 'movie',
-      plot: movie.plot,
-      cast: movie.cast,
-      director: movie.director,
-      genre: movie.genre,
-      releaseDate: movie.releaseDate,
-      duration: movie.duration,
-      rating: movie.rating
-    };
+  async getVodCategories() {
+    return this.fetchApi<VodCategory[]>({ action: 'get_vod_categories' });
   }
 
-  private mapSeries(series: any): Series {
-    return {
-      id: series.series_id.toString(),
-      seriesId: series.series_id,
-      name: series.name,
-      thumbnail: series.cover || null,
-      streamType: 'series',
-      plot: series.plot,
-      cast: series.cast,
-      director: series.director,
-      genre: series.genre,
-      releaseDate: series.releaseDate,
-      rating: series.rating,
-      seasons: series.seasons?.map((s: any) => parseInt(s.season_number))
-    };
-  }
-
-  private mapEpisode(episode: any): Episode {
-    return {
-      id: episode.id.toString(),
-      title: episode.title || episode.name,
-      seasonNumber: parseInt(episode.season_number),
-      episodeNumber: parseInt(episode.episode_number),
-      plot: episode.plot,
-      duration: episode.duration,
-      releaseDate: episode.releaseDate
-    };
+  async getSeriesCategories() {
+    return this.fetchApi<SeriesCategory[]>({ action: 'get_series_categories' });
   }
 
   async getLiveStreams(): Promise<LiveStream[]> {
     try {
-      const data = await this.fetchWithRetry(
-        `${this.baseUrl}/player_api.php?username=${this.username}&password=${this.password}&action=get_live_streams`
-      );
+      const data = await this.fetchApi<LiveStream[]>({ action: 'get_live_streams' });
       
       if (!Array.isArray(data)) {
         throw new XtreamAPIError('Invalid response format: expected array');
       }
       
-      return data.map(stream => this.mapLiveStream(stream));
+      return data.map(stream => ({
+        id: stream.stream_id.toString(),
+        streamId: stream.stream_id,
+        name: stream.name,
+        thumbnail: stream.stream_icon || null,
+        streamType: 'live',
+        epgChannelId: stream.epg_channel_id,
+        isAdult: stream.is_adult === '1',
+        categoryId: stream.category_id?.toString()
+      }));
     } catch (error) {
       console.error('Error fetching live streams:', error);
       throw error instanceof XtreamAPIError ? error : new XtreamAPIError(
@@ -166,15 +250,26 @@ export default class XtreamAPI {
 
   async getMovies(): Promise<Movie[]> {
     try {
-      const data = await this.fetchWithRetry(
-        `${this.baseUrl}/player_api.php?username=${this.username}&password=${this.password}&action=get_vod_streams`
-      );
+      const data = await this.fetchApi<VodStream[]>({ action: 'get_vod_streams' });
       
       if (!Array.isArray(data)) {
         throw new XtreamAPIError('Invalid response format: expected array');
       }
       
-      return data.map(movie => this.mapMovie(movie));
+      return data.map(movie => ({
+        id: movie.stream_id.toString(),
+        streamId: movie.stream_id,
+        name: movie.name,
+        thumbnail: movie.stream_icon || movie.cover || null,
+        streamType: 'movie',
+        plot: movie.plot,
+        cast: movie.cast,
+        director: movie.director,
+        genre: movie.genre,
+        releaseDate: movie.release_date,
+        duration: movie.container_extension,
+        rating: movie.rating
+      }));
     } catch (error) {
       console.error('Error fetching movies:', error);
       throw error instanceof XtreamAPIError ? error : new XtreamAPIError(
@@ -185,15 +280,27 @@ export default class XtreamAPI {
 
   async getSeries(): Promise<Series[]> {
     try {
-      const data = await this.fetchWithRetry(
-        `${this.baseUrl}/player_api.php?username=${this.username}&password=${this.password}&action=get_series`
-      );
+      const data = await this.fetchApi<SeriesStream[]>({ action: 'get_series' });
       
       if (!Array.isArray(data)) {
         throw new XtreamAPIError('Invalid response format: expected array');
       }
       
-      return data.map(series => this.mapSeries(series));
+      return data.map(series => ({
+        id: series.series_id.toString(),
+        seriesId: series.series_id,
+        name: series.name,
+        thumbnail: series.cover || null,
+        streamType: 'series',
+        plot: series.plot,
+        cast: series.cast,
+        director: series.director,
+        genre: series.genre,
+        releaseDate: series.release_date,
+        rating: series.rating,
+        rating_5based: series.rating_5based,
+        seasons: series.seasons?.map((s: any) => parseInt(s.season_number))
+      }));
     } catch (error) {
       console.error('Error fetching series:', error);
       throw error instanceof XtreamAPIError ? error : new XtreamAPIError(
@@ -204,9 +311,7 @@ export default class XtreamAPI {
 
   async getSeriesInfo(seriesId: string): Promise<any> {
     try {
-      return await this.fetchWithRetry(
-        `${this.baseUrl}/player_api.php?username=${this.username}&password=${this.password}&action=get_series_info&series_id=${seriesId}`
-      );
+      return await this.fetchApi<SeriesInfo>({ action: 'get_series_info', series_id: seriesId });
     } catch (error) {
       console.error('Error fetching series info:', error);
       throw error instanceof XtreamAPIError ? error : new XtreamAPIError(

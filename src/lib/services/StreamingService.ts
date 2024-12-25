@@ -44,9 +44,13 @@ export class StreamingService {
   async getLiveStreams(): Promise<LiveStream[]> {
     try {
       console.log('StreamingService: Getting live streams');
-      const streams = await this.api.getLiveStreams();
-      console.log('StreamingService: Got live streams:', streams.length);
-      return streams;
+      const response = await this.api.getLiveStreams();
+      console.log('StreamingService: Got live streams:', response.length);
+      return response.map(item => ({
+        ...item,
+        streamType: 'live' as const,
+        category: item.category_name || 'Uncategorized'
+      }));
     } catch (error) {
       console.error('StreamingService: Error getting live streams:', error);
       throw error;
@@ -56,9 +60,13 @@ export class StreamingService {
   async getMovies(): Promise<Movie[]> {
     try {
       console.log('StreamingService: Getting movies');
-      const movies = await this.api.getMovies();
-      console.log('StreamingService: Got movies:', movies.length);
-      return movies;
+      const response = await this.api.getMovies();
+      console.log('StreamingService: Got movies:', response.length);
+      return response.map(item => ({
+        ...item,
+        streamType: 'movie' as const,
+        category: item.category_name || 'Uncategorized'
+      }));
     } catch (error) {
       console.error('StreamingService: Error getting movies:', error);
       throw error;
@@ -68,9 +76,13 @@ export class StreamingService {
   async getSeries(): Promise<Series[]> {
     try {
       console.log('StreamingService: Getting series');
-      const series = await this.api.getSeries();
-      console.log('StreamingService: Got series:', series.length);
-      return series;
+      const response = await this.api.getSeries();
+      console.log('StreamingService: Got series:', response.length);
+      return response.map(item => ({
+        ...item,
+        streamType: 'series' as const,
+        category: item.category_name || 'Uncategorized'
+      }));
     } catch (error) {
       console.error('StreamingService: Error getting series:', error);
       throw error;

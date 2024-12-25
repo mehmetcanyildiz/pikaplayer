@@ -1,46 +1,27 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { LiveStream } from '@/types/profile';
 import VideoPlayer from '@/components/player/VideoPlayer';
 import InfiniteScroll from '@/components/common/InfiniteScroll';
-import { useLiveStreams } from '@/hooks/useStreamingData';
+import { useLiveStreams, useLiveCategories } from '@/hooks/useStreamingData';
 
 const PAGE_SIZE = 24;
 
 export default function LivePage() {
   const router = useRouter();
   const { currentProfile } = useProfiles();
-  const { data: allStreams, error: fetchError, isLoading } = useLiveStreams(currentProfile);
+  const { data: categories = [], isLoading: categoriesLoading } = useLiveCategories(currentProfile);
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const { data: allStreams = [], error: fetchError, isLoading: streamsLoading } = useLiveStreams(currentProfile, selectedCategory);
   
   const [selectedStream, setSelectedStream] = useState<LiveStream | null>(null);
   const [page, setPage] = useState(1);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  const categories = useMemo(() => {
-    if (!allStreams) return ['all'];
-    const categorySet = new Set<string>();
-    allStreams.forEach(stream => {
-      if (stream.category) {
-        categorySet.add(stream.category);
-      }
-    });
-    return ['all', ...Array.from(categorySet)];
-  }, [allStreams]);
-
-  const filteredStreams = useMemo(() => {
-    if (!allStreams) return [];
-    if (selectedCategory === 'all') return allStreams;
-    return allStreams.filter(stream => stream.category === selectedCategory);
-  }, [allStreams, selectedCategory]);
-
-  const paginatedStreams = useMemo(() => {
-    return filteredStreams.slice(0, page * PAGE_SIZE);
-  }, [filteredStreams, page]);
-
-  const hasMore = paginatedStreams.length < filteredStreams.length;
+  const paginatedStreams = allStreams.slice(0, page * PAGE_SIZE);
+  const hasMore = paginatedStreams.length < allStreams.length;
 
   useEffect(() => {
     if (!currentProfile) {
@@ -72,19 +53,16 @@ export default function LivePage() {
         <img
           src={stream.thumbnail}
           alt={stream.name}
-          className="w-full h-32 object-cover"
+          className="w-full h-48 object-cover"
           loading="lazy"
         />
       ) : (
-        <div className="w-full h-32 bg-gray-700 flex items-center justify-center">
-          <span className="text-gray-400">📺</span>
+        <div className="w-full h-48 bg-gray-700 flex items-center justify-center">
+          <span className="text-gray-400">No Image</span>
         </div>
       )}
-      <div className="p-3">
+      <div className="p-2">
         <h3 className="text-sm font-medium truncate">{stream.name}</h3>
-        {stream.category && (
-          <p className="text-xs text-gray-400 mt-1">{stream.category}</p>
-        )}
       </div>
     </div>
   );
@@ -120,6 +98,8 @@ export default function LivePage() {
           <VideoPlayer
             src={`${currentProfile?.url}/live/${currentProfile?.username}/${currentProfile?.password}/${selectedStream.streamId}.m3u8`}
             poster={selectedStream.thumbnail}
+            title={selectedStream.name}
+            onBack={() => setSelectedStream(null)}
             onError={(error) => {
               console.error('Video player error:', error);
             }}
@@ -127,9 +107,6 @@ export default function LivePage() {
           <div className="mt-4 flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-bold">{selectedStream.name}</h2>
-              {selectedStream.category && (
-                <p className="mt-2 text-sm text-primary">{selectedStream.category}</p>
-              )}
             </div>
             <button
               onClick={() => setSelectedStream(null)}
@@ -141,18 +118,28 @@ export default function LivePage() {
         </div>
       ) : (
         <>
-          <div className="mb-6 flex flex-wrap gap-2">
+          <div className="mb-6 flex gap-2 overflow-x-auto whitespace-nowrap pb-2 hide-scrollbar">
+            <button
+              onClick={() => setSelectedCategory('')}
+              className={`px-4 py-2 rounded-full text-sm ${
+                selectedCategory === ''
+                  ? 'bg-primary text-white'
+                  : 'bg-secondary hover:bg-gray-700'
+              }`}
+            >
+              All Channels
+            </button>
             {categories.map((category) => (
               <button
-                key={category}
-                onClick={() => setSelectedCategory(category)}
+                key={category.category_id}
+                onClick={() => setSelectedCategory(category.category_id)}
                 className={`px-4 py-2 rounded-full text-sm ${
-                  selectedCategory === category
+                  selectedCategory === category.category_id
                     ? 'bg-primary text-white'
                     : 'bg-secondary hover:bg-gray-700'
                 }`}
               >
-                {category === 'all' ? 'All Channels' : category}
+                {category.category_name}
               </button>
             ))}
           </div>
@@ -162,7 +149,7 @@ export default function LivePage() {
             renderItem={renderStream}
             loadMore={loadMore}
             hasMore={hasMore}
-            loading={isLoading}
+            loading={streamsLoading || categoriesLoading}
             className="mt-4"
           />
         </>

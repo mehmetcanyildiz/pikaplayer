@@ -1,48 +1,30 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { Series } from '@/types/profile';
 import VideoPlayer from '@/components/player/VideoPlayer';
 import InfiniteScroll from '@/components/common/InfiniteScroll';
-import { useSeries, useSeriesInfo } from '@/hooks/useStreamingData';
+import { useSeries, useSeriesCategories, useSeriesInfo } from '@/hooks/useStreamingData';
 
 const PAGE_SIZE = 24;
 
 export default function SeriesPage() {
   const router = useRouter();
   const { currentProfile } = useProfiles();
-  const { data: allSeries, error: fetchError, isLoading } = useSeries(currentProfile);
+  const { data: categories = [], isLoading: categoriesLoading } = useSeriesCategories(currentProfile);
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const { data: allSeries = [], error: fetchError, isLoading: seriesLoading } = useSeries(currentProfile, selectedCategory);
   
   const [selectedSeries, setSelectedSeries] = useState<Series | null>(null);
+  const [selectedEpisode, setSelectedEpisode] = useState<any>(null);
   const [page, setPage] = useState(1);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   const { data: seriesInfo } = useSeriesInfo(currentProfile, selectedSeries?.id ?? null);
 
-  const categories = useMemo(() => {
-    if (!allSeries) return ['all'];
-    const categorySet = new Set<string>();
-    allSeries.forEach(series => {
-      if (series.category) {
-        categorySet.add(series.category);
-      }
-    });
-    return ['all', ...Array.from(categorySet)];
-  }, [allSeries]);
-
-  const filteredSeries = useMemo(() => {
-    if (!allSeries) return [];
-    if (selectedCategory === 'all') return allSeries;
-    return allSeries.filter(series => series.category === selectedCategory);
-  }, [allSeries, selectedCategory]);
-
-  const paginatedSeries = useMemo(() => {
-    return filteredSeries.slice(0, page * PAGE_SIZE);
-  }, [filteredSeries, page]);
-
-  const hasMore = paginatedSeries.length < filteredSeries.length;
+  const paginatedSeries = allSeries.slice(0, page * PAGE_SIZE);
+  const hasMore = paginatedSeries.length < allSeries.length;
 
   useEffect(() => {
     if (!currentProfile) {
@@ -60,6 +42,7 @@ export default function SeriesPage() {
 
   const handleSeriesSelect = (series: Series) => {
     setSelectedSeries(series);
+    setSelectedEpisode(null);
   };
 
   const renderSeries = (series: Series) => (
@@ -84,9 +67,6 @@ export default function SeriesPage() {
       )}
       <div className="p-2">
         <h3 className="text-sm font-medium truncate">{series.name}</h3>
-        {series.category && (
-          <p className="text-xs text-gray-400 mt-1">{series.category}</p>
-        )}
       </div>
     </div>
   );
@@ -119,78 +99,98 @@ export default function SeriesPage() {
     <div className="min-h-screen p-4">
       {selectedSeries ? (
         <div className="mb-8">
-          <div className="mt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold">{selectedSeries.name}</h2>
-                {selectedSeries.plot && (
-                  <p className="mt-2 text-gray-400">{selectedSeries.plot}</p>
-                )}
-                {selectedSeries.category && (
-                  <p className="mt-2 text-sm text-primary">{selectedSeries.category}</p>
-                )}
+          {selectedEpisode ? (
+            <VideoPlayer
+              src={`${currentProfile?.url}/series/${currentProfile?.username}/${currentProfile?.password}/${selectedEpisode.id}.ts`}
+              poster={selectedSeries.thumbnail}
+              title={`${selectedSeries.name} - ${selectedEpisode.title}`}
+              onBack={() => setSelectedEpisode(null)}
+              onError={(error) => {
+                console.error('Video player error:', error);
+              }}
+            />
+          ) : (
+            <div className="mt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold">{selectedSeries.name}</h2>
+                  {selectedSeries.plot && (
+                    <p className="mt-2 text-gray-400">{selectedSeries.plot}</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => setSelectedSeries(null)}
+                  className="px-4 py-2 bg-secondary text-white rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  Back to Series
+                </button>
               </div>
-              <button
-                onClick={() => setSelectedSeries(null)}
-                className="px-4 py-2 bg-secondary text-white rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                Back to Series
-              </button>
-            </div>
 
-            {seriesInfo && (
-              <div className="mt-8">
-                <h3 className="text-xl font-semibold mb-4">Episodes</h3>
-                <div className="grid gap-4">
-                  {seriesInfo.seasons?.map((season) => (
-                    <div key={season.seasonNumber} className="space-y-4">
-                      <h4 className="text-lg font-medium">Season {season.seasonNumber}</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {season.episodes.map((episode) => (
-                          <div
-                            key={episode.id}
-                            className="p-4 bg-secondary rounded-lg hover:bg-gray-700 transition-colors"
-                          >
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <h5 className="font-medium">Episode {episode.episodeNum}</h5>
-                                <p className="text-sm text-gray-400 mt-1">{episode.title}</p>
+              {seriesInfo && (
+                <div className="mt-8">
+                  <h3 className="text-xl font-semibold mb-4">Episodes</h3>
+                  <div className="grid gap-4">
+                    {Object.entries(seriesInfo.seasons || {}).map(([seasonNum, season]) => (
+                      <div key={seasonNum} className="space-y-4">
+                        <h4 className="text-lg font-medium">Season {season.season_number}</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {season.episodes?.map((episode) => (
+                            <div
+                              key={episode.id}
+                              onClick={() => setSelectedEpisode(episode)}
+                              className="p-4 bg-secondary rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
+                            >
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <h5 className="font-medium">Episode {episode.episode_num}</h5>
+                                  <p className="text-sm text-gray-400 mt-1">{episode.title}</p>
+                                </div>
+                                {episode.info?.duration && (
+                                  <span className="text-sm text-gray-400">
+                                    {episode.info.duration}
+                                  </span>
+                                )}
                               </div>
-                              {episode.duration && (
-                                <span className="text-sm text-gray-400">
-                                  {episode.duration}min
-                                </span>
+                              {episode.info?.plot && (
+                                <p className="text-sm text-gray-400 mt-2 line-clamp-2">
+                                  {episode.info.plot}
+                                </p>
                               )}
                             </div>
-                            {episode.plot && (
-                              <p className="text-sm text-gray-400 mt-2 line-clamp-2">
-                                {episode.plot}
-                              </p>
-                            )}
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <>
-          <div className="mb-6 flex flex-wrap gap-2">
+          <div className="mb-6 flex gap-2 overflow-x-auto whitespace-nowrap pb-2 hide-scrollbar">
+            <button
+              onClick={() => setSelectedCategory('')}
+              className={`px-4 py-2 rounded-full text-sm ${
+                selectedCategory === ''
+                  ? 'bg-primary text-white'
+                  : 'bg-secondary hover:bg-gray-700'
+              }`}
+            >
+              All Series
+            </button>
             {categories.map((category) => (
               <button
-                key={category}
-                onClick={() => setSelectedCategory(category)}
+                key={category.category_id}
+                onClick={() => setSelectedCategory(category.category_id)}
                 className={`px-4 py-2 rounded-full text-sm ${
-                  selectedCategory === category
+                  selectedCategory === category.category_id
                     ? 'bg-primary text-white'
                     : 'bg-secondary hover:bg-gray-700'
                 }`}
               >
-                {category === 'all' ? 'All Series' : category}
+                {category.category_name}
               </button>
             ))}
           </div>
@@ -200,7 +200,7 @@ export default function SeriesPage() {
             renderItem={renderSeries}
             loadMore={loadMore}
             hasMore={hasMore}
-            loading={isLoading}
+            loading={seriesLoading || categoriesLoading}
             className="mt-4"
           />
         </>
