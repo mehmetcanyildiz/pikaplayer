@@ -23,8 +23,13 @@ export default function SeriesPage() {
 
   const categories = useMemo(() => {
     if (!allSeries) return ['all'];
-    const uniqueCategories = [...new Set(allSeries.map(series => series.category))].filter(Boolean);
-    return ['all', ...uniqueCategories];
+    const categorySet = new Set<string>();
+    allSeries.forEach(series => {
+      if (series.category) {
+        categorySet.add(series.category);
+      }
+    });
+    return ['all', ...Array.from(categorySet)];
   }, [allSeries]);
 
   const filteredSeries = useMemo(() => {

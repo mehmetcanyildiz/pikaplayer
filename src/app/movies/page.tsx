@@ -21,8 +21,13 @@ export default function MoviesPage() {
 
   const categories = useMemo(() => {
     if (!allMovies) return ['all'];
-    const uniqueCategories = [...new Set(allMovies.map(movie => movie.category))].filter(Boolean);
-    return ['all', ...uniqueCategories];
+    const categorySet = new Set<string>();
+    allMovies.forEach(movie => {
+      if (movie.category) {
+        categorySet.add(movie.category);
+      }
+    });
+    return ['all', ...Array.from(categorySet)];
   }, [allMovies]);
 
   const filteredMovies = useMemo(() => {

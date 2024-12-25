@@ -21,8 +21,13 @@ export default function LivePage() {
 
   const categories = useMemo(() => {
     if (!allStreams) return ['all'];
-    const uniqueCategories = [...new Set(allStreams.map(stream => stream.category))].filter(Boolean);
-    return ['all', ...uniqueCategories];
+    const categorySet = new Set<string>();
+    allStreams.forEach(stream => {
+      if (stream.category) {
+        categorySet.add(stream.category);
+      }
+    });
+    return ['all', ...Array.from(categorySet)];
   }, [allStreams]);
 
   const filteredStreams = useMemo(() => {
