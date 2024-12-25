@@ -130,37 +130,37 @@ export default function SeriesPage() {
                 <div className="mt-8">
                   <h3 className="text-xl font-semibold mb-4">Episodes</h3>
                   <div className="grid gap-4">
-                    {Object.entries(seriesInfo.seasons || {}).map(([seasonNum, season]) => (
-                      <div key={seasonNum} className="space-y-4">
-                        <h4 className="text-lg font-medium">Season {season.season_number}</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {season.episodes?.map((episode) => (
-                            <div
-                              key={episode.id}
-                              onClick={() => setSelectedEpisode(episode)}
-                              className="p-4 bg-secondary rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
-                            >
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  <h5 className="font-medium">Episode {episode.episode_num}</h5>
-                                  <p className="text-sm text-gray-400 mt-1">{episode.title}</p>
-                                </div>
-                                {episode.info?.duration && (
-                                  <span className="text-sm text-gray-400">
-                                    {episode.info.duration}
-                                  </span>
-                                )}
+                  {Object.entries(seriesInfo?.seasons || {}).map(([seasonNum, season]) => (
+                    <div key={seasonNum} className="space-y-4">
+                      <h4 className="text-lg font-medium">Season {(season as any).season_number}</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {(season as any).episodes?.map((episode: any) => (
+                          <div
+                            key={episode.id}
+                            onClick={() => setSelectedEpisode(episode)}
+                            className="p-4 bg-secondary rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
+                          >
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h5 className="font-medium">Episode {episode.episode_num}</h5>
+                                <p className="text-sm text-gray-400 mt-1">{episode.title}</p>
                               </div>
-                              {episode.info?.plot && (
-                                <p className="text-sm text-gray-400 mt-2 line-clamp-2">
-                                  {episode.info.plot}
-                                </p>
+                              {episode.info?.duration && (
+                                <span className="text-sm text-gray-400">
+                                  {episode.info.duration}
+                                </span>
                               )}
                             </div>
-                          ))}
-                        </div>
+                            {episode.info?.plot && (
+                              <p className="text-sm text-gray-400 mt-2 line-clamp-2">
+                                {episode.info.plot}
+                              </p>
+                            )}
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    </div>
+                  ))}
                   </div>
                 </div>
               )}
